@@ -68,11 +68,9 @@ export function prepareSuggestedQSO (qso, qsos, operation, vfo, settings) {
   return clone
 }
 
-// A brand-new QSO with no callsign entered is just the blank starting point seeded
-// from the VFO, there is nothing the operator started, so it is not worth keeping.
-// Re-queuing such a blank (when a deep link or QSO selection interrupts entry) would
-// later restore it as the "next" QSO and revert freq/mode away from "last known
-// good". Only preserve an interrupted entry the operator actually began.
+// A brand-new QSO with no callsign entered is just the blank starting point
+// seeded from the VFO; only preserve an interrupted entry the operator actually
+// began, otherwise restoring it later would revert freq/mode to stale values.
 function qsoWorthQueuing (qso) {
   return qso?._isNew && !qso?._isSuggested && !!qso?.their?.call
 }
@@ -94,10 +92,9 @@ export const manageNextQSO = ({ selectedUUID, suggestedQSO, qsos, operation, vfo
   let nextQSO
   if (suggestedQSO) {
     nextQSO = prepareSuggestedQSO(suggestedQSO, qsos, operation, vfo, settings)
-    // A suggested QSO, from a deep link (e.g. SOTAcat "Tell PoLo") or from tapping
-    // a spot, carries an authoritative freq/mode. Record it as the VFO so it
-    // becomes "last known good"; otherwise, once this QSO is logged, the next one
-    // would revert to the prior VFO (prepareNewQSO seeds new QSOs from the VFO).
+    // A suggested QSO, from a deep link or from tapping a spot, carries an
+    // authoritative freq/mode. Record it as the VFO so subsequent new QSOs
+    // (which are seeded from the VFO) start from it.
     const vfoUpdate = {}
     if (nextQSO.freq) vfoUpdate.freq = nextQSO.freq
     if (nextQSO.band) vfoUpdate.band = nextQSO.band

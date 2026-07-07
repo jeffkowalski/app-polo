@@ -16,6 +16,27 @@
  * includes the `/` in a SOTA reference (`W6/CT-006` -> `W6%2FCT-006`) and in a
  * portable callsign (`S5/KC6X/P` -> `S5%2FKC6X%2FP`).
  *
+ * # Set up an operation:
+ *
+ *   `com.ham2k:///operation?our.refs=pota:US-1234,sota:W6%2FCT-006`
+ *
+ *   - `our.refs`: References for our own activation, a comma separated list of
+ *      type:ref pairs. Finds a recent operation activating exactly those
+ *      references, or creates one, and opens it for logging.
+ *
+ * # Set the logging frequency and mode:
+ *
+ *   `com.ham2k:///vfo?frequency=14250000&mode=SSB`
+ *
+ *   - `frequency`: Frequency in Hz
+ *   - `freq`: Frequency in kHz (used only if `frequency` is absent)
+ *   - `mode`: Mode (optional; derived from the frequency if omitted)
+ *
+ *   Applies to the operation currently open (or the most recent one), so
+ *   contacts logged from then on use the new frequency and mode. Useful for
+ *   companion apps (SOTAcat, SOTAmat) that already handle spotting themselves
+ *   and only need PoLo's log to follow the radio.
+ *
  * # Present a QSO for logging:
  *
  *   `com.ham2k:///qso?their.call=N0CALL&frequency=7200000&mode=CW`
@@ -30,21 +51,11 @@
  *   - `their.refs`: References for the station being worked, a comma separated
  *      list of type:ref pairs (i.e. "pota:US-1234,sota:W6%2FCT-225").
  *      These become the hunted references on the suggested QSO.
- *   - `our.refs`: References for our own activation, a comma separated list of
- *      type:ref pairs. These select (or create) the operation for the QSO.
  *   - `returnpath`: Origin of the calling app (reserved; currently ignored).
  *
- *   Reference types are matched against the activity registry; unknown types are skipped.
- *   The link is routed by whether `our.refs` is present:
- *   - With `our.refs`: find a recent operation activating exactly those
- *     references, or create one, and present the QSO there. This covers:
- *       Operation setup:  `com.ham2k:///qso?our.refs=pota:US-1234`
- *       Self-spot:        `com.ham2k:///qso?our.refs=sota:W6%2FCT-006&frequency=14250000&mode=SSB`
- *       Summit/Park-to-Park (S2S/P2P), combined with `their.*`:
- *         `com.ham2k:///qso?our.refs=sota:W6%2FCT-006&their.call=KI2D&their.refs=pota:US-1234&frequency=7185000&mode=SSB`
- *   - Without `our.refs`: present the QSO in the current operation if one is
- *     open, otherwise the most recent operation. This covers plain chasing:
- *       `com.ham2k:///qso?their.call=KI2D&their.refs=pota:US-1234&frequency=7185000&mode=SSB`
+ *   The QSO is presented in the operation currently open, or the most recent
+ *   one. Reference types are matched against the activity registry; unknown
+ *   types are skipped.
  *
  * # Link a Client
  *   `com.ham2k:///link_client?id=1234&token=ABC...`
@@ -54,8 +65,8 @@ import { useCallback, useEffect, useRef } from 'react'
 import { Linking } from 'react-native'
 import { useDispatch } from 'react-redux'
 
-import { selectLatestOperation, selectAllOperations } from './store/operations'
-import { buildSuggestedQSO, findOrCreateOperation } from './DeepLinkUtils'
+import { selectLatestOperation, findOrCreateOperation } from './store/operations'
+import { buildSuggestedQSO, parseRefs } from './tools/deepLinkTools'
 
 const DEBUG = false
 
@@ -83,36 +94,47 @@ export function DeepLinks ({ navigationRef }) {
       console.log('-- params:', params)
     }
 
-    if (path === '/qso') {
-      const { qso, ourRefs } = buildSuggestedQSO(params, url)
+    if (path === '/operation') {
+      const ourRefs = parseRefs(params['our.refs'])
+      if (DEBUG) console.log('🔗 Deep Link to Operation:', ourRefs)
+      if (!ourRefs?.length) return
 
-      if (DEBUG) console.log('🔗 Deep Link to QSO:', { ...qso, their: { ...qso?.their || {} }, ourRefs })
+      _onceNavigationIsReady(navigationRef, () => {
+        dispatch(async (thunkDispatch) => {
+          const operation = await thunkDispatch(findOrCreateOperation({ ourRefs }))
+          navigationRef.current.navigate('Operation', { uuid: operation.uuid, operation, screen: 'OpLog' })
+        })
+      })
+    } else if (path === '/qso' || path === '/vfo') {
+      // `/vfo` only carries a frequency and mode; `/qso` also suggests the
+      // station being worked. Both are presented in the current operation,
+      // where the suggested QSO's freq/mode become the new VFO.
+      const qsoParams = path === '/vfo'
+        ? { frequency: params.frequency, freq: params.freq, mode: params.mode }
+        : params
+      const qso = buildSuggestedQSO(qsoParams, url)
 
-      _onceNavigationIsReady(navigationRef, async () => {
+      if (DEBUG) console.log('🔗 Deep Link to QSO:', { ...qso, their: { ...qso?.their || {} } })
+
+      _onceNavigationIsReady(navigationRef, () => {
         if (DEBUG) console.log('-- navigationRef.current', navigationRef.current?.getRootState())
         const navState = navigationRef.current.getRootState()
         const route = navState.routes[navState.index]
         if (DEBUG) console.log('-- current route', route?.name)
 
         // Use `screen: 'OpLog'` below to force navigation to the logging tab, where the prefilled QSO appears.
-        if (ourRefs?.length) {
-          // our.refs present (setup / self-spot / S2S): present the QSO in the
-          // operation activating those references, creating it if necessary.
-          await dispatch(async (_dispatch, getState) => {
-            const operation = await findOrCreateOperation({ ourRefs, operations: selectAllOperations(getState()), dispatch })
-            navigationRef.current.navigate('Operation', { uuid: operation.uuid, operation, qso, screen: 'OpLog' })
-          })
-        } else if (route?.name === 'Operation' || route?.name === 'OpLog') {
-          // chase: present the QSO in the operation currently open
+        if (route?.name === 'Operation' || route?.name === 'OpLog') {
+          // present the QSO in the operation currently open
           const navParams = { qso, screen: 'OpLog' }
           if (route.params.operation) navParams.operation = route.params.operation
           if (route.params.uuid) navParams.uuid = route.params.uuid
           navigationRef.current.navigate('Operation', navParams)
         } else {
-          // chase with no operation open: fall back to the most recent operation
+          // no operation open: fall back to the most recent operation
           if (DEBUG) console.log('-- no existing route, navigating to Operation')
-          await dispatch((_dispatch, getState) => {
+          dispatch((_dispatch, getState) => {
             const operation = selectLatestOperation(getState())
+            if (!operation) return
             navigationRef.current.navigate('Operation', { qso, uuid: operation.uuid, screen: 'OpLog' })
           })
         }
