@@ -7,7 +7,7 @@ import { superModeForMode } from '@ham2k/lib-operation-data'
 import { fmtNumber } from '@ham2k/lib-format-tools'
 import { findRef, replaceRef } from '@ham2k/lib-qson-tools'
 
-import { H2kTextInput, H2kTextInputWithSuggestions } from '../../../ui'
+import { H2kEnhancedTextInput, H2kTextInputWithSuggestions } from '../../../ui'
 
 import { ABBREVIATED_SECTION_NAMES, ARRL_SECTIONS, PREFIX_TO_LOCATION, RAC_SECTIONS } from '../fd/FDSections'
 import { WFDActivityOptions } from './WFDActivityOptions'
@@ -69,7 +69,6 @@ const ReferenceHandler = {
 
   descriptionPlaceholder: '',
   description: (operation) => {
-    console.log('WFD description', operation)
     let date
     if (operation?.startAtMillisMax) date = new Date(operation.startAtMillisMax)
     else date = new Date()
@@ -309,7 +308,7 @@ function mainExchangeForOperation(props) {
   const fields = []
 
   fields.push(
-    <H2kTextInput
+    <H2kEnhancedTextInput
       {...props}
       key={`${Info.key}/class`}
       innerRef={refStack.shift()}
@@ -345,9 +344,12 @@ function mainExchangeForOperation(props) {
       error={ref?.location && !WFD_LOCATIONS.includes(ref.location)}
       suggestions={_suggestionsFor(qso)}
       minimumLengthForSuggestions={3}
-      onChangeText={(text) => updateQSO({
-        refs: replaceRef(qso?.refs, Info.key, { ...ref, location: text })
-      })}
+      onChangeText={(text) => {
+        if (ref?.location === undefined && text === '') return
+        updateQSO({
+          refs: replaceRef(qso?.refs, Info.key, { ...ref, location: text })
+        })
+      }}
     />
   )
   return fields

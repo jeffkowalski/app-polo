@@ -1,4 +1,23 @@
 {
+  "26.7.0-pre0": {
+    "name": "July '26 (pre 0)",
+    "photoCaption": "KI2D at US-2138 and LLUS-0006",
+    "changes": [
+      "Improved performance of text input controls",
+      "QSO Party updates (Colorado)",
+      "Quick link to SOTA login screen when account is not logged in",
+      "Fixes to VHF Contests Cabrillo exports (thanks to 2E0FRU)",
+      "Assorted bug fixes"
+    ]
+  },
+  "26.6.4": {
+    "name": "June '26 (patch 4)",
+    "photoCaption": "ON4VT at ONFF-0440",
+    "changes": [
+      "LLOTA changed reference format",
+      "Fixed Field Day scoring"
+    ]
+  },
   "26.6.3": {
     "name": "June '26 (patch 3)",
     "photoCaption": "ON4VT at ONFF-0440",
@@ -15,7 +34,7 @@
     ]
   },
   "26.6.1": {
-    "name": "June '26 (patch 1)",
+    "name": "July '26 (pre 0)",
     "photoCaption": "ON4VT at ONFF-0440",
     "changes": [
       "Fixes for FD and WFD location suggestions",
